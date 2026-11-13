@@ -1,9 +1,26 @@
 {
   "manifest_version": 3,
   "name": "Slack Link Reuse",
-  "version": "1.0.0",
+  "version": "1.1.1",
   "description": "Open Slack message links in your existing Slack web tab instead of a new tab with the 'open in desktop app' page.",
-  "permissions": ["tabs", "webNavigation", "scripting"],
-  "host_permissions": ["https://*.slack.com/*"],
-  "background": { "service_worker": "background.js" }
+  "permissions": [
+    "tabs",
+    "webNavigation",
+    "declarativeNetRequestWithHostAccess"
+  ],
+  "host_permissions": [
+    "https://*.slack.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "archives_to_messages",
+        "enabled": true,
+        "path": "rules.json"
+      }
+    ]
+  }
 }

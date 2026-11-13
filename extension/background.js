@@ -3,8 +3,9 @@
 // Slack permalinks (https://<workspace>.slack.com/archives/<channel>/p<ts>) load an
 // "opening in the desktop app" page. Its "open this link in your browser" link points
 // to the same message under /messages/ instead of /archives/, which opens the web
-// client directly. We rewrite to that path, and if a Slack web tab is already open we
-// load the message there, focus it, and close the tab the link opened.
+// client directly. rules.json redirects /archives/ to /messages/ for every tab. On top
+// of that, if a Slack web tab is already open, this script loads the message there,
+// focuses it, and closes the tab the link opened.
 
 const SLACK_CLIENT_URL = "https://app.slack.com/client/*";
 const recentlyHandled = new Map(); // tabId -> timestamp, avoids double handling
@@ -53,17 +54,8 @@ async function findSlackTab(excludeTabId, windowId) {
   return tabs[0];
 }
 
-// True when the tab exists only because of this link (new tab / blank before it).
-function isThrowawayTab(tab) {
-  const prev = tab.url || "";
-  return (
-    !prev ||
-    prev === "about:blank" ||
-    /^(chrome|brave|edge):\/\/newtab/.test(prev) ||
-    parseSlackLink(prev) !== null ||
-    /^https:\/\/[^/]+\.slack\.com\/(archives|messages)\//.test(prev)
-  );
-}
+const SLACK_PAGE = /^https:\/\/([^/]+\.)?slack\.com\//;
+const BLANK_PAGE = /^(about:blank|(chrome|brave|edge):\/\/newtab|chrome-search:)/;
 
 async function handle(details) {
   if (details.frameId !== 0) return;
@@ -80,25 +72,55 @@ async function handle(details) {
   } catch {
     return;
   }
-  // Links Slack itself navigates to inside its own tab are left alone.
-  if ((sourceTab.url || "").startsWith("https://app.slack.com/")) return;
 
   const slackTab = await findSlackTab(sourceTab.id, sourceTab.windowId);
   if (!slackTab) {
-    // No Slack tab yet: skip the desktop-app page and open the web client here.
-    await chrome.tabs.update(sourceTab.id, { url: target });
+    // No other Slack tab: this tab becomes the Slack tab. /archives/ links are already
+    // redirected by rules.json (instantly, before Slack's page can try the desktop app).
+    if (!/\/archives\//.test(details.url)) await chrome.tabs.update(sourceTab.id, { url: target });
     return;
   }
 
   await chrome.tabs.update(slackTab.id, { url: target, active: true });
   await chrome.windows.update(slackTab.windowId, { focused: true });
 
-  if (isThrowawayTab(sourceTab)) {
+  // Now undo the link in the tab it opened in. Wait until it has committed (going back
+  // earlier would skip one page too far), then go back to the page it replaced. A tab
+  // opened just for this link has nothing to go back to (or only a blank page): close it.
+  await waitForCommit(sourceTab.id);
+  const now = await chrome.tabs.get(sourceTab.id).catch(() => null);
+  if (!now) return;
+  if (!SLACK_PAGE.test(now.url || "")) return; // navigation was cancelled; tab kept its page
+  try {
+    await chrome.tabs.goBack(sourceTab.id);
+  } catch {
     await chrome.tabs.remove(sourceTab.id).catch(() => {});
-  } else {
-    // The link replaced a page the user still wants: go back to it.
-    await chrome.tabs.goBack(sourceTab.id).catch(() => chrome.tabs.remove(sourceTab.id));
+    return;
   }
+  await waitForCommit(sourceTab.id);
+  const after = await chrome.tabs.get(sourceTab.id).catch(() => null);
+  if (after && BLANK_PAGE.test(after.url || "")) {
+    await chrome.tabs.remove(sourceTab.id).catch(() => {});
+  }
+}
+
+// Resolves once the tab's pending main-frame navigation commits or fails (or at once
+// if nothing is pending).
+async function waitForCommit(tabId) {
+  let finish;
+  const settled = new Promise((resolve) => (finish = resolve));
+  const listener = (d) => {
+    if (d.tabId === tabId && d.frameId === 0) finish();
+  };
+  chrome.webNavigation.onCommitted.addListener(listener);
+  chrome.webNavigation.onErrorOccurred.addListener(listener);
+  const timer = setTimeout(finish, 5000);
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  if (!tab || !tab.pendingUrl) finish();
+  await settled;
+  clearTimeout(timer);
+  chrome.webNavigation.onCommitted.removeListener(listener);
+  chrome.webNavigation.onErrorOccurred.removeListener(listener);
 }
 
 const filter = {

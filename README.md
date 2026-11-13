@@ -24,7 +24,8 @@ itself are left alone.
    `extension/` folder.
 
 That's it. To update it, replace the files and click the reload icon on the
-extension's card.
+extension's card. (Restarting the browser is not enough: it keeps running the old
+background script until you click reload.)
 
 ### Linux alternative: load it with a launch flag
 
@@ -36,6 +37,7 @@ folder's path to that comma-separated list, then restart the browser.
 
 - `tabs`, `webNavigation`: notice Slack links as they open, find your Slack tab,
   and close the extra tab.
+- `declarativeNetRequestWithHostAccess`: the `/archives/` → `/messages/` redirect.
 - `https://*.slack.com/*`: limits all of this to Slack URLs.
 
 It makes no network requests and stores nothing.
@@ -43,9 +45,14 @@ It makes no network requests and stores nothing.
 ## How it works
 
 Slack's desktop-app page includes an "open this link in your browser" link to the
-same message under `/messages/` instead of `/archives/`. The extension rewrites
-`/archives/<channel>/p<ts>?thread_ts=…` to that `/messages/` URL and loads it in
-your existing Slack tab. A link that replaced a page in the same tab sends that
-tab back to the page it was on.
+same message under `/messages/` instead of `/archives/`, which opens the web client
+on the right message and thread.
+
+1. `extension/rules.json` redirects every `/archives/…` page load to `/messages/…`
+   before Slack's page can try the desktop app. This alone removes the "Launching
+   Slack" page.
+2. `extension/background.js` then loads the message in your existing Slack tab and
+   focuses it. Back in the tab the link opened in, it goes back to the page you were
+   on, or closes the tab if it was opened just for the link.
 
 Test the URL parsing with `node test.js`.
