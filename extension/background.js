@@ -1,4 +1,4 @@
-// Slack Link Reuse: send Slack message links to the Slack web tab you already have open.
+// Slack Tab Keeper: send Slack message links to the Slack web tab you already have open.
 //
 // Slack permalinks (https://<workspace>.slack.com/archives/<channel>/p<ts>) load an
 // "opening in the desktop app" page. Its "open this link in your browser" link points

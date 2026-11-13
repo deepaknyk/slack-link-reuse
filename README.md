@@ -1,4 +1,4 @@
-# Slack Link Reuse
+# Slack Tab Keeper
 
 A small Chrome/Brave/Edge extension for people who use Slack in the browser
 (app.slack.com) instead of the desktop app.

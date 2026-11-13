@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "Slack Link Reuse",
-  "version": "1.1.1",
+  "name": "Slack Tab Keeper",
+  "version": "1.2.0",
   "description": "Open Slack message links in your existing Slack web tab instead of a new tab with the 'open in desktop app' page.",
   "permissions": [
     "tabs",
